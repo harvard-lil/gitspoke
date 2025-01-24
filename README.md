@@ -3,7 +3,7 @@ Gitspoke
 
 Gitspoke is a tool for downloading complete archives of public GitHub repositories, including all metadata, issues, pull requests, and git history. The tool is intended for archival and analysis of open source projects.
 
-Gitspoke downloads both the complete git repository and all available metadata through the GitHub API, storing everything in a structured directory format for easy access and analysis.
+Gitspoke downloads both the complete git repository and all available metadata through the GitHub API, storing everything in a structured directory format.
 
 Gitspoke is not published by or associated with GitHub.
 
@@ -82,8 +82,8 @@ Authentication
 Gitspoke supports authentication in this order:
 
 1. Anonymous access (with --no-login flag)
-3. GitHub API token via `--token` option
-2. GitHub API token via GITHUB_TOKEN environment variable
+2. GitHub API token via `--token` option
+3. GitHub API token via GITHUB_TOKEN environment variable
 4. Saved token in `~/.gitspoke/config.json`
 5. Device flow authentication (interactive login)
 

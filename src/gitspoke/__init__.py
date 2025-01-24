@@ -1,5 +1,5 @@
 from importlib.metadata import version, PackageNotFoundError
-from .main import Downloader, GitHubAPI
+from .cli import Downloader, GitHubAPI
 
 
 try:
