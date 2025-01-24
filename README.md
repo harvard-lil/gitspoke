@@ -106,7 +106,7 @@ For example, issues and comments are kept in separate files that would have to b
 for display.
 
 Command Line Usage
------------------
+------------------
 
 ```
 Usage: gitspoke [OPTIONS] URL
@@ -117,9 +117,25 @@ Options:
   --no-login               Download anonymously without authentication
   --token TEXT             GitHub API token
   -o, --output PATH        Output directory
+  --include TEXT           Comma-separated list of elements to include
   --log-level [DEBUG|INFO|WARNING|ERROR|CRITICAL]
-                          Set logging level
+                           Set logging level
   --help                   Show this message and exit
+```
+
+Unpacking the git bundle
+-------------------------
+
+To unpack a git bundle, use the following command:
+
+```
+git clone some_path/git.bundle output_dir
+```
+
+You can also use this to access the contents of the wiki:
+
+```
+git clone some_path/wiki.bundle wiki_dir
 ```
 
 Development
