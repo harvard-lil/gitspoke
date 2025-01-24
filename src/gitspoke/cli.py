@@ -14,6 +14,8 @@ from ghapi.all import github_auth_device
 
 logger = logging.getLogger(__name__)
 
+CONFIG_PATH = Path.home() / ".gitspoke" / "config.json"
+
 class GitHubAPI:
     BASE_URL = "https://api.github.com/"
     
@@ -133,10 +135,15 @@ class Downloader:
         # Check if repo exists
         logger.debug(f"Checking if repository {self.owner}/{self.repo_name} exists")
         repo_url = f'/repos/{self.owner}/{self.repo_name}'
-        repo_info = self.api.request(repo_url).json()
-        if repo_info['message'] == 'Not Found':
-            logger.error(f"Repository {self.owner}/{self.repo_name} not found")
-            return
+        try:
+            repo_info = self.api.request(repo_url).json()
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.error(f"Repository {self.owner}/{self.repo_name} not found")
+                return
+            else:
+                logger.error(f"Failed to load repository {self.owner}/{self.repo_name}: {e}")
+                return
 
         # Make output dir
         if output_dir is None:
@@ -187,9 +194,10 @@ class Downloader:
             paginate=False  # languages endpoint returns a dict
         )
 
-def load_saved_token():
+        logger.debug("Download completed successfully")
+
+def load_saved_token(config_path: Path = CONFIG_PATH):
     """Load GitHub token from config file."""
-    config_path = Path.home() / ".github_downloader" / "config.json"
     if config_path.exists():
         try:
             config = json.loads(config_path.read_text())
@@ -198,12 +206,28 @@ def load_saved_token():
             return None
     return None
 
-def save_token(token):
-    """Save GitHub token to config file."""
-    config_path = Path.home() / ".gitspoke" / "config.json"
+def save_token(token, config_path: Path = CONFIG_PATH):
+    """Save GitHub token to config file with restricted permissions."""
     print(f"Saving token to {config_path}")
+    
+    # Create config.json with restricted permissions
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config = {"token": token}
+    config_path.parent.chmod(0o700)
+    config_path.touch(exist_ok=True)
+    config_path.chmod(0o600)
+    
+    # Read existing config if present
+    config = {}
+    if config_path.stat().st_size > 0:
+        try:
+            config = json.loads(config_path.read_text())
+            if not isinstance(config, dict):
+                raise ValueError("Config file must contain a JSON object")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in config file: {e}")
+    
+    # Update token and write back
+    config["token"] = token
     config_path.write_text(json.dumps(config, indent=2))
 
 @click.command()
@@ -235,7 +259,6 @@ def main(url, no_login, token, output, log_level):
 
     downloader = Downloader(url, token)
     downloader.download_repo(output)
-    logger.debug("Download completed successfully")
 
 if __name__ == "__main__":
     main()
