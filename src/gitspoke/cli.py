@@ -48,16 +48,23 @@ class GitHubAPI:
         kwargs['params']['per_page'] = 100
         url = urljoin(self.BASE_URL, path.lstrip("/"))
         
-        while True:
-            response = self.request(url, **kwargs)
-            items = response.json()
-            if list_key:
-                items = items[list_key]
-            yield from items
-            
-            if 'next' not in response.links:
-                break
-            url = response.links['next']['url']
+        try:
+            while True:
+                response = self.request(url, method=method, **kwargs)
+                items = response.json()
+                if list_key:
+                    items = items[list_key]
+                yield from items
+                
+                if 'next' not in response.links:
+                    break
+                url = response.links['next']['url']
+                
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 422 and "pagination is limited" in e.response.text.lower():
+                logger.warning("Hit GitHub pagination limit. Some results may be incomplete.")
+                return
+            raise
 
 class Downloader:
     def __init__(self, url: str, token: Optional[str] = None):
@@ -110,11 +117,11 @@ class Downloader:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             subprocess.run([
-                "git", "clone", "--mirror", clone_url, str(temp_dir)
+                "git", "clone", "--mirror", clone_url, temp_dir
             ], check=True)
             subprocess.run([
-                "git", "bundle", "create", str(bundle_file), "--all"
-            ], cwd=str(temp_dir), check=True)
+                "git", "bundle", "create", str(bundle_file.absolute()), "--all"
+            ], cwd=temp_dir, check=True)
 
     def download_readme(self, output_dir: Path):
         """Download repository's preferred readme file in HTML format."""
