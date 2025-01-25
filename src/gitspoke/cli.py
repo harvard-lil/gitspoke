@@ -48,7 +48,7 @@ class GitHubAPI:
             self,
             token: Optional[str] = None,
             max_retries: int = 3,
-            max_wait: int = 10
+            max_wait: int = 100,
     ):
         self.max_retries = max_retries
         self.max_wait = max_wait
@@ -129,12 +129,13 @@ class Downloader:
             owner: str,
             repo_name: str,
             token: Optional[str] = None,
-            max_retries: int = 3
+            max_retries: int = 3,
+            max_wait: int = 100,
     ):
         self.token = token
         self.owner = owner
         self.repo_name = repo_name
-        self.api = GitHubAPI(token, max_retries)
+        self.api = GitHubAPI(token, max_retries, max_wait)
 
     def write_api_response(
             self,
