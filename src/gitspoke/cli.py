@@ -302,6 +302,29 @@ def save_token(token, config_path: Path = CONFIG_PATH):
     config["token"] = token
     config_path.write_text(json.dumps(config, indent=2))
 
+def get_token(token: Optional[str], no_login: bool = False, config_path: Path = CONFIG_PATH, interactive: bool = False):
+    """Apply our logic for choosing a github token, in order of preference."""
+    # --no-login takes precedence over --token
+    if no_login:
+        return None
+    # --token flag
+    if token:
+        return token
+    # GITHUB_TOKEN env var
+    if token := os.environ.get('GITHUB_TOKEN'):
+        return token
+    # config.json
+    if token := load_saved_token(config_path):
+        return token
+    # interactive login
+    if interactive:
+        token = github_auth_device()
+        save_token(token)
+        return token
+    # no token found
+    return None
+
+
 @click.group()
 def cli():
     """GitHub repository downloader and utility tool."""
@@ -310,7 +333,7 @@ def cli():
 @cli.command()
 @click.argument('url')
 @click.option('--no-login', is_flag=True, help='Download without authentication')
-@click.option('--token', envvar='GITHUB_TOKEN', help='GitHub API token')
+@click.option('--token', help='GitHub API token')
 @click.option('--output', '-o', help='Output directory', type=click.Path(path_type=Path))
 @click.option('--include', 
               help='Comma-separated list of elements to include: ' + ', '.join(valid_include_items))
@@ -328,13 +351,8 @@ def download(url, no_login, token, output, include, log_level):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    if not no_login and not token:
-        token = os.environ.get('GITHUB_TOKEN') or load_saved_token()
-        if not token:
-            logger.info("No token found, starting device authentication flow...")
-            token = github_auth_device()
-            save_token(token)
-            logger.debug("Successfully saved new token")
+    token = get_token(token, no_login, interactive=True)
+    logger.debug(f"Using {'unauthenticated' if not token else 'authenticated'} access")
 
     # Parse include options
     if include:
@@ -353,17 +371,10 @@ def download(url, no_login, token, output, include, log_level):
 
 @cli.command()
 @click.option('--no-login', is_flag=True, help='Check rate limit without authentication')
-@click.option('--token', envvar='GITHUB_TOKEN', help='GitHub API token')
+@click.option('--token', help='GitHub API token')
 def rate_limit(no_login, token):
     """Show current GitHub API rate limit status."""
-    if not no_login and not token:
-        token = os.environ.get('GITHUB_TOKEN') or load_saved_token()
-        if not token:
-            logger.info("No token found, starting device authentication flow...")
-            token = github_auth_device()
-            save_token(token)
-            logger.debug("Successfully saved new token")
-
+    token = get_token(token, no_login, interactive=False)
     api = GitHubAPI(token)
     limits = api.request('rate_limit').json()
     
