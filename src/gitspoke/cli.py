@@ -10,7 +10,7 @@ import requests
 from typing import Optional, Iterator, Any
 from urllib.parse import urljoin
 from ghapi.all import github_auth_device
-
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +38,14 @@ endpoints = [
 ]
 
 valid_include_items = [
-    "all", "bundle", "readme", "wiki"
+    "all", "repo_info", "bundle", "readme", "wiki"
 ] + [endpoint[0].split(".")[0] for endpoint in endpoints]
 
 class GitHubAPI:
     BASE_URL = "https://api.github.com/"
     
-    def __init__(self, token: Optional[str] = None):
+    def __init__(self, token: Optional[str] = None, max_retries: int = 3):
+        self.max_retries = max_retries
         self.session = requests.Session()
         self.session.headers.update({
             "Accept": "application/vnd.github.v3+json",
@@ -56,7 +57,27 @@ class GitHubAPI:
     def request(self, path: str, method: str = 'GET', **kwargs) -> Any:
         """Send a request to GitHub API."""
         url = urljoin(self.BASE_URL, path.lstrip("/"))
-        response = self.session.request(method, url, **kwargs)
+
+        for _ in range(self.max_retries):
+            response = self.session.request(method, url, **kwargs)
+
+            # handle rate limit
+            if response.status_code in (403, 429) and response.headers.get('x-ratelimit-remaining') == '0':
+                if retry_after := response.headers.get('retry-after'):
+                    logger.debug(f"Secondary rate limit exceeded, using retry-after header. Waiting {retry_after} seconds...")
+                    sleep_time = int(retry_after)
+                else:
+                    reset_time = response.headers['x-ratelimit-reset']
+                    logger.debug(f"Primary rate limit exceeded, using x-ratelimit-reset header. Waiting {reset_time} - {time.time()} seconds...")
+                    sleep_time = int(reset_time) - time.time()
+                
+                sleep_time += 1  # Add 1 second buffer
+                logger.warning(f"Rate limit exceeded. Waiting {sleep_time:.1f} seconds...")
+                time.sleep(sleep_time)
+                continue
+            
+            break
+
         response.raise_for_status()
         return response
 
@@ -97,7 +118,7 @@ class GitHubAPI:
             raise
 
 class Downloader:
-    def __init__(self, url: str, token: Optional[str] = None):
+    def __init__(self, url: str, token: Optional[str] = None, max_retries: int = 3):
         self.token = token
         # Parse url
         match = re.search(r"github\.com/([^/]+)/([^/]+)", url)
@@ -106,7 +127,7 @@ class Downloader:
         self.owner, self.repo_name = match.groups()
         self.repo_name = self.repo_name.rstrip('.git')
 
-        self.api = GitHubAPI(token)
+        self.api = GitHubAPI(token, max_retries)
 
     def write_api_response(
             self,
