@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gitspoke = "gitspoke.cli:main"
+gitspoke = "gitspoke.cli:cli"
 
 [build-system]
 requires = ["hatchling"]

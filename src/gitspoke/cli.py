@@ -302,7 +302,12 @@ def save_token(token, config_path: Path = CONFIG_PATH):
     config["token"] = token
     config_path.write_text(json.dumps(config, indent=2))
 
-@click.command()
+@click.group()
+def cli():
+    """GitHub repository downloader and utility tool."""
+    pass
+
+@cli.command()
 @click.argument('url')
 @click.option('--no-login', is_flag=True, help='Download without authentication')
 @click.option('--token', envvar='GITHUB_TOKEN', help='GitHub API token')
@@ -313,7 +318,9 @@ def save_token(token, config_path: Path = CONFIG_PATH):
               type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], case_sensitive=False),
               default='INFO',
               help='Set logging level')
-def main(url, no_login, token, output, include, log_level):
+def download(url, no_login, token, output, include, log_level):
+    """Download a GitHub repository and its metadata."""
+    # Move existing main() logic here
     # Configure logging - set root logger level to affect all loggers
     level = getattr(logging, log_level.upper())
     logging.getLogger().setLevel(level)
@@ -344,5 +351,30 @@ def main(url, no_login, token, output, include, log_level):
     downloader = Downloader(url, token)
     downloader.download_repo(output, include_items)
 
+@cli.command()
+@click.option('--no-login', is_flag=True, help='Check rate limit without authentication')
+@click.option('--token', envvar='GITHUB_TOKEN', help='GitHub API token')
+def rate_limit(no_login, token):
+    """Show current GitHub API rate limit status."""
+    if not no_login and not token:
+        token = os.environ.get('GITHUB_TOKEN') or load_saved_token()
+        if not token:
+            logger.info("No token found, starting device authentication flow...")
+            token = github_auth_device()
+            save_token(token)
+            logger.debug("Successfully saved new token")
+
+    api = GitHubAPI(token)
+    limits = api.request('rate_limit').json()
+    
+    # Print rate limits in a readable format
+    for category, data in limits['resources'].items():
+        reset_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data['reset']))
+        print(f"\n{category.upper()}:")
+        print(f"  Limit: {data['limit']}")
+        print(f"  Used: {data['used']}")
+        print(f"  Remaining: {data['remaining']}")
+        print(f"  Resets at: {reset_time}")
+
 if __name__ == "__main__":
-    main()
+    cli()
