@@ -186,10 +186,14 @@ class Downloader:
         else:
             clone_url = f"https://github.com/{self.owner}/{self.repo_name}{extension}"
         
-        with tempfile.TemporaryDirectory() as temp_dir:
+        # Use the parent directory of the dir we're downloading to as the temp dir,
+        # in case the git repo is too large to fit on /tmp
+        with tempfile.TemporaryDirectory(dir=str(bundle_file.parent.parent)) as temp_dir:
+            clone_dir = Path(temp_dir) / 'clone'
+            tmp_bundle_file = Path(temp_dir) / 'bundle'
             try:
                 subprocess.run([
-                    "git", "clone", "--mirror", clone_url, temp_dir
+                    "git", "clone", "--mirror", clone_url, str(clone_dir)
                 ], check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as e:
                 if "Repository not found" in e.stderr:
@@ -197,8 +201,10 @@ class Downloader:
                     return
                 raise
             subprocess.run([
-                "git", "bundle", "create", str(bundle_file.absolute()), "--all"
-            ], cwd=temp_dir, check=True)
+                "git", "bundle", "create", str(tmp_bundle_file), "--all"
+            ], cwd=str(clone_dir), check=True)
+            # create temp file and rename so interrupted downloads don't create partial files
+            tmp_bundle_file.rename(bundle_file)
 
     def download_readme(self, output_dir: Path):
         """Download repository's preferred readme file in HTML format."""
