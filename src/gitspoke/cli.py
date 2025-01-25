@@ -118,15 +118,16 @@ class GitHubAPI:
             raise
 
 class Downloader:
-    def __init__(self, url: str, token: Optional[str] = None, max_retries: int = 3):
+    def __init__(
+            self,
+            owner: str,
+            repo_name: str,
+            token: Optional[str] = None,
+            max_retries: int = 3
+    ):
         self.token = token
-        # Parse url
-        match = re.search(r"github\.com/([^/]+)/([^/]+)", url)
-        if not match:
-            raise ValueError(f"Invalid GitHub URL: {url}")
-        self.owner, self.repo_name = match.groups()
-        self.repo_name = self.repo_name.rstrip('.git')
-
+        self.owner = owner
+        self.repo_name = repo_name
         self.api = GitHubAPI(token, max_retries)
 
     def write_api_response(
@@ -331,7 +332,7 @@ def cli():
     pass
 
 @cli.command()
-@click.argument('url')
+@click.argument('repo')
 @click.option('--no-login', is_flag=True, help='Download without authentication')
 @click.option('--token', help='GitHub API token')
 @click.option('--output', '-o', help='Output directory', type=click.Path(path_type=Path))
@@ -341,7 +342,7 @@ def cli():
               type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], case_sensitive=False),
               default='INFO',
               help='Set logging level')
-def download(url, no_login, token, output, include, log_level):
+def download(repo, no_login, token, output, include, log_level):
     """Download a GitHub repository and its metadata."""
     # Move existing main() logic here
     # Configure logging - set root logger level to affect all loggers
@@ -364,9 +365,11 @@ def download(url, no_login, token, output, include, log_level):
     else:
         include_items = ["all"]
 
+    owner, repo_name = repo.split("/")
+
     logger.debug("Starting GitHub repository download")
 
-    downloader = Downloader(url, token)
+    downloader = Downloader(owner, repo_name, token)
     downloader.download_repo(output, include_items)
 
 @cli.command()

@@ -13,27 +13,33 @@ Quick start
 Download a repository without logging in:
 
 ```
-gitspoke https://github.com/owner/repo --no-login
+gitspoke download owner/repo --no-login
 ```
 
 Download with GitHub authentication (recommended to avoid rate limits):
 
 ```
-gitspoke https://github.com/owner/repo
+gitspoke download owner/repo
 ```
 
 Download to a specific directory:
 
 ```
-gitspoke https://github.com/owner/repo -o /path/to/output
+gitspoke download owner/repo -o /path/to/output
+```
+
+Check your current API rate limits:
+
+```
+gitspoke rate-limit
 ```
 
 As a library:
 
-```
+```python
 from gitspoke import Downloader
 
-downloader = Downloader(url, token)
+downloader = Downloader("owner", "repo", token)
 downloader.download_repo(output_path)
 ```
 
@@ -54,6 +60,7 @@ Gitspoke downloads:
 * Security advisories
 * Language statistics
 * README in HTML format
+* Wiki as a git bundle
 
 Installation
 ------------
@@ -97,6 +104,7 @@ Output Format
 Gitspoke creates a directory structure containing:
 
 * `git.bundle` - Complete git repository history
+* `wiki.bundle` - Complete wiki history
 * `repo_info.json` - Basic repository metadata
 * `readme.html` - Repository README in HTML format
 * `issues.json`, `pull_requests.json`, etc. - results of GitHub API requests
@@ -109,19 +117,26 @@ Command Line Usage
 ------------------
 
 ```
-Usage: gitspoke [OPTIONS] URL
+Usage: gitspoke [OPTIONS] COMMAND [ARGS]...
 
-  Download complete GitHub repository archive
+  GitHub repository downloader and utility tool.
 
-Options:
-  --no-login               Download anonymously without authentication
-  --token TEXT             GitHub API token
-  -o, --output PATH        Output directory
-  --include TEXT           Comma-separated list of elements to include
+Commands:
+  download    Download a GitHub repository and its metadata
+  rate-limit  Show current GitHub API rate limit status
+
+Download Options:
+  REPO                     Repository in owner/repo format
+  --no-login              Download without authentication
+  --token TEXT            GitHub API token
+  -o, --output PATH       Output directory
+  --include TEXT          Comma-separated list of elements to include
   --log-level [DEBUG|INFO|WARNING|ERROR|CRITICAL]
-                           Set logging level
-  --help                   Show this message and exit
+                         Set logging level
+  --help                 Show this message and exit
 ```
+
+Available include options: all, repo_info, bundle, readme, wiki, issues, issue_comments, labels, milestones, pull_requests, pr_review_comments, releases, tags, security_advisories, workflows, stargazers, watchers, contributors, commit_comments, forks, branches, pages, languages
 
 Unpacking the git bundle
 -------------------------
@@ -146,7 +161,7 @@ Clone the repository and install dependencies:
 ```
 git clone https://github.com/harvard-lil/gitspoke
 cd gitspoke
-uv run src/github_downloader/main.py
+uv run src/gitspoke/cli.py
 ```
 
 Current Limitations
