@@ -44,8 +44,14 @@ valid_include_items = [
 class GitHubAPI:
     BASE_URL = "https://api.github.com/"
     
-    def __init__(self, token: Optional[str] = None, max_retries: int = 3):
+    def __init__(
+            self,
+            token: Optional[str] = None,
+            max_retries: int = 3,
+            max_wait: int = 10
+    ):
         self.max_retries = max_retries
+        self.max_wait = max_wait
         self.session = requests.Session()
         self.session.headers.update({
             "Accept": "application/vnd.github.v3+json",
@@ -71,7 +77,7 @@ class GitHubAPI:
                     logger.debug(f"Primary rate limit exceeded, using x-ratelimit-reset header. Waiting {reset_time} - {time.time()} seconds...")
                     sleep_time = int(reset_time) - time.time()
                 
-                sleep_time += 1  # Add 1 second buffer
+                sleep_time = min(sleep_time+1, self.max_wait)
                 logger.warning(f"Rate limit exceeded. Waiting {sleep_time:.1f} seconds...")
                 time.sleep(sleep_time)
                 continue
@@ -389,6 +395,17 @@ def rate_limit(no_login, token):
         print(f"  Used: {data['used']}")
         print(f"  Remaining: {data['remaining']}")
         print(f"  Resets at: {reset_time}")
+
+@cli.command()
+@click.option('--save', is_flag=True, help='Save token to config file')
+def auth(save):
+    """Authenticate with GitHub and get an access token."""
+    token = github_auth_device()
+    print(f"\nReceived token: {token}")
+    
+    if save:
+        save_token(token)
+        print(f"Token saved to {CONFIG_PATH}")
 
 if __name__ == "__main__":
     cli()
