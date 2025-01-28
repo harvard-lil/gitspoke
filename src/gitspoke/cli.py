@@ -137,6 +137,45 @@ class Downloader:
         self.repo_name = repo_name
         self.api = GitHubAPI(token, max_retries, max_wait)
 
+    def update_manifest(self, item: str, status: str, timestamp: str = None):
+        """Update manifest with timestamp and status for an item."""
+        self.manifest["entries"][item] = {
+            "timestamp": timestamp or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "status": status
+        }
+
+    def save_manifest(self, output_dir: Path):
+        """Save manifest to manifest.json."""
+        if "user_agent" not in self.manifest or self.manifest != self.original_manifest:
+            from gitspoke import __version__
+            self.manifest["user_agent"] = f"gitspoke/{__version__}"
+        manifest_path = output_dir / "manifest.json"
+        manifest_path.write_text(json.dumps(self.manifest, indent=2))
+
+    def load_manifest(self, output_dir: Path):
+        """Load manifest from manifest.json."""
+        manifest_path = output_dir / "manifest.json"
+        if manifest_path.exists():
+            self.manifest = json.loads(manifest_path.read_text())
+            self.manifest.setdefault("entries", {})
+        else:
+            self.manifest = {"entries": {}}
+        self.original_manifest = self.manifest.copy()
+
+    def manifest_success(self, item: str, path: Path | None = None):
+        """Return whether item has been successfully downloaded."""
+        if item in self.manifest["entries"] and self.manifest["entries"][item]["status"] != "error":
+            logger.info(f"Skipping {item} - already in manifest")
+            return True
+        elif path and path.exists():
+            # we also consider it a success if the file already exists
+            # (this may not be needed once old archives are updated)
+            logger.info(f"Skipping {item} - {path.name} already exists")
+            timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(path.stat().st_mtime))
+            self.update_manifest(item, "success", timestamp)
+            return True
+        return False
+
     def write_api_response(
             self,
             path: Path,
@@ -146,8 +185,9 @@ class Downloader:
             **kwargs
     ):
         """Write API response to a JSON file. By default paginates through all results."""
-        if path.exists():
-            logger.info(f"Skipping {path.name} - file already exists")
+        # skip successful downloads
+        item_name = path.stem
+        if self.manifest_success(path.stem, path):
             return
             
         logger.info(f"Downloading {path.name}...")
@@ -158,24 +198,23 @@ class Downloader:
             else:
                 response = self.api.request(endpoint, **kwargs)
                 results = response.json()
+            path.write_text(json.dumps(results, indent=2))
+            self.update_manifest(item_name, "success")
+            
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404 and expect_404:
-                results = [] if paginate else {}
+                # some routes return 404 if that category of item isn't present for this repo
+                self.update_manifest(item_name, "not found")
             else:
+                logger.error(f"Error downloading {path.name}: {e}")
+                self.update_manifest(item_name, "error")
                 raise
-        
-        path.write_text(json.dumps(results, indent=2))
-        
-        if paginate:
-            logger.debug(f"Wrote {len(results)} items to {path}")
-        else:
-            logger.debug(f"Wrote response to {path}")
 
     def download_git_repo(self, bundle_file: Path, extension: str = ".git"):
         """Download complete git repository using git protocol."""
-        
-        if bundle_file.exists():
-            logger.info(f"{bundle_file.name} already exists, skipping...")
+        # skip successful downloads
+        item_name = bundle_file.stem
+        if self.manifest_success(item_name, bundle_file):
             return
 
         logger.info("Downloading complete git repository...")
@@ -198,6 +237,7 @@ class Downloader:
             except subprocess.CalledProcessError as e:
                 if "Repository not found" in e.stderr:
                     logger.warning(f"Repository not found: {self.owner}/{self.repo_name}{extension}")
+                    self.update_manifest(item_name, "not found")
                     return
                 raise
             subprocess.run([
@@ -205,12 +245,14 @@ class Downloader:
             ], cwd=str(clone_dir), check=True)
             # create temp file and rename so interrupted downloads don't create partial files
             tmp_bundle_file.rename(bundle_file)
+            self.update_manifest(item_name, "success")
 
     def download_readme(self, output_dir: Path):
         """Download repository's preferred readme file in HTML format."""
         html_path = output_dir / "readme.html"
-        if html_path.exists():
-            logger.info("Readme already exists, skipping...")
+        
+        # skip successful downloads
+        if self.manifest_success("readme", html_path):
             return
         
         logger.info("Downloading readme...")
@@ -219,6 +261,7 @@ class Downloader:
             headers={"Accept": "application/vnd.github.html+json"}
         )
         html_path.write_text(response.text)
+        self.update_manifest("readme", "success")
 
     def download_repo(self, output_dir: Optional[Path] = None, include: Optional[list[str]] = None):
         """Download repository metadata and git content.
@@ -231,6 +274,8 @@ class Downloader:
         if include is None:
             include = []
         include_set = set(include)
+
+        self.load_manifest(output_dir)
         
         # Check if repo exists
         repo_url = f'/repos/{self.owner}/{self.repo_name}'
@@ -239,6 +284,8 @@ class Downloader:
             # use cached repo info
             logger.debug(f"Using cached repo info for {self.owner}/{self.repo_name}")
             repo_info = json.loads(repo_info_path.read_text())
+            # make sure timestamp is recorded for legacy archives
+            self.manifest_success("repo_info", repo_info_path)
         else:
             # fetch repo info
             logger.debug(f"Fetching repo info for {self.owner}/{self.repo_name}")
@@ -251,6 +298,7 @@ class Downloader:
                 else:
                     logger.error(f"Failed to load repository {self.owner}/{self.repo_name}: {e}")
                     return
+            self.update_manifest("repo_info", "success")
 
             # Make output dir
             if output_dir is None:
@@ -280,6 +328,8 @@ class Downloader:
             if "all" in include_set or filename.split(".")[0] in include_set:
                 self.write_api_response(output_dir / filename, f'{repo_url}/{url}', **kwargs)
 
+        # Save manifest at the end
+        self.save_manifest(output_dir)
         logger.debug("Download completed successfully")
 
 def load_saved_token(config_path: Path = CONFIG_PATH):
