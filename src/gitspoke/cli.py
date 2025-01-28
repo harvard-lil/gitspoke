@@ -219,10 +219,9 @@ class Downloader:
         logger.info("Downloading complete git repository...")
 
         # Extract the HTTPS clone URL
-        if self.token:
-            clone_url = f"https://oauth2:{self.token}@github.com/{self.owner}/{self.repo_name}{extension}"
-        else:
-            clone_url = f"https://github.com/{self.owner}/{self.repo_name}{extension}"
+        clone_url = f"https://github.com/{self.owner}/{self.repo_name}{extension}"
+        # NOTE: not currently using token to avoid showing it in the subprocess name.
+        # If this is needed, GIT_ASKPASS looks promising. https://serverfault.com/a/912788
         
         # Use the parent directory of the dir we're downloading to as the temp dir,
         # in case the git repo is too large to fit on /tmp
@@ -238,7 +237,10 @@ class Downloader:
                     logger.warning(f"Repository not found: {self.owner}/{self.repo_name}{extension}")
                     self.update_manifest(item_name, "not found")
                     return
-                raise
+                else:
+                    logger.error(f"Error downloading git repository: {e}")
+                    self.update_manifest(item_name, "error")
+                    return
             try:
                 subprocess.run([
                     "git", "bundle", "create", str(tmp_bundle_file), "--all"
