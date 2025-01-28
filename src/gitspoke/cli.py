@@ -240,9 +240,16 @@ class Downloader:
                     self.update_manifest(item_name, "not found")
                     return
                 raise
-            subprocess.run([
-                "git", "bundle", "create", str(tmp_bundle_file), "--all"
-            ], cwd=str(clone_dir), check=True)
+            try:
+                subprocess.run([
+                    "git", "bundle", "create", str(tmp_bundle_file), "--all"
+                ], cwd=str(clone_dir), check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as e:
+                if "Refusing to create empty bundle" in e.stderr:
+                    logger.warning(f"Repository is empty: {self.owner}/{self.repo_name}{extension}")
+                    self.update_manifest(item_name, "not found")
+                    return
+                raise
             # create temp file and rename so interrupted downloads don't create partial files
             tmp_bundle_file.rename(bundle_file)
             self.update_manifest(item_name, "success")
