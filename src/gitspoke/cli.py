@@ -256,10 +256,18 @@ class Downloader:
             return
         
         logger.info("Downloading readme...")
-        response = self.api.request(
-            f'/repos/{self.owner}/{self.repo_name}/readme',
-            headers={"Accept": "application/vnd.github.html+json"}
-        )
+        
+        try:
+            response = self.api.request(
+                f'/repos/{self.owner}/{self.repo_name}/readme',
+                headers={"Accept": "application/vnd.github.html+json"}
+            )
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Error downloading readme: {e}")
+            self.update_manifest("readme", "error")
+            return
+        
         html_path.write_text(response.text)
         self.update_manifest("readme", "success")
 
