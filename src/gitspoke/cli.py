@@ -2,7 +2,6 @@ import os
 import json
 from pathlib import Path
 import click
-import re
 import subprocess
 import tempfile
 import logging
@@ -14,7 +13,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = Path.home() / ".gitspoke" / "config.json"
+CONFIG_PATH = (os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")) / "gitspoke" / "config.json"
 
 endpoints = [
     ("issues.json", "issues?state=all"),
