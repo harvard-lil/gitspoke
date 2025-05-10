@@ -216,7 +216,7 @@ class Downloader:
         if self.manifest_success(item_name, bundle_file):
             return
 
-        logger.info("Downloading complete git repository...")
+        logger.info(f"Downloading complete git repository to {bundle_file}...")
 
         # Extract the HTTPS clone URL
         clone_url = f"https://github.com/{self.owner}/{self.repo_name}{extension}"
@@ -291,6 +291,11 @@ class Downloader:
             include = []
         include_set = set(include)
 
+        # Set default output directory if none provided
+        if output_dir is None:
+            output_dir = Path.cwd() / self.owner / self.repo_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
         self.load_manifest(output_dir)
         
         # Check if repo exists
@@ -315,11 +320,6 @@ class Downloader:
                     logger.error(f"Failed to load repository {self.owner}/{self.repo_name}: {e}")
                     return
             self.update_manifest("repo_info", "success")
-
-            # Make output dir
-            if output_dir is None:
-                output_dir = Path.cwd() / self.owner / self.repo_name
-            output_dir.mkdir(parents=True, exist_ok=True)
 
             # Save repository info
             repo_info_path.write_text(json.dumps(repo_info, indent=2))
